@@ -9,3 +9,5 @@ cdk.out
 
 .idea
 build
+CLAUDE.md
+cdk_repo_setup.md

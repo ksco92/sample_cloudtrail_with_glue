@@ -23,6 +23,9 @@ import {
 import {
     Database,
 } from "@aws-cdk/aws-glue-alpha";
+import {
+    CfnWorkGroup,
+} from "aws-cdk-lib/aws-athena";
 
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
@@ -155,6 +158,22 @@ export class SampleCloudtrailWithGlueStack extends cdk.Stack {
             hybridAccessEnabled: true,
             roleArn: lfServiceRoleArn,
         });
+
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        // Athena WG
+
+        new CfnWorkGroup(this, 'ReadOnlyWorkGroup', {
+            name: 'ReadOnly',
+            workGroupConfiguration: {
+                publishCloudWatchMetricsEnabled: true,
+                resultConfiguration: {
+                    outputLocation: `s3://${athenaResultsBucket.bucketName}/ReadOnlyWorkGroup`,
+                },
+            },
+        })
 
         /// /////////////////////////////////////////////////
         /// /////////////////////////////////////////////////

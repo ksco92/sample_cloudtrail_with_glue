@@ -199,4 +199,18 @@ describe('SampleCloudtrailWithGlueStack', () => {
         });
     });
 
+    describe('Athena', () => {
+        test('creates Athena workgroup', () => {
+            template.hasResourceProperties('AWS::Athena::WorkGroup', {
+                Name: 'ReadOnly',
+                WorkGroupConfiguration: {
+                    PublishCloudWatchMetricsEnabled: true,
+                    ResultConfiguration: {
+                        OutputLocation: Match.anyValue(),
+                    },
+                },
+            });
+        });
+    });
+
 });

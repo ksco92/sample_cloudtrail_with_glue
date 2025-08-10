@@ -33,8 +33,6 @@ import {
     RetentionDays,
 } from "aws-cdk-lib/aws-logs";
 
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
-
 export class SampleCloudtrailWithGlueStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
@@ -216,6 +214,13 @@ export class SampleCloudtrailWithGlueStack extends cdk.Stack {
             roleArn: lfServiceRoleArn,
         });
 
+        new CfnResource(this, 'CloudtrailRegisteredLocation', {
+            resourceArn: `${cloudtrailBucket.bucketArn}/`,
+            useServiceLinkedRole: true,
+            hybridAccessEnabled: true,
+            roleArn: lfServiceRoleArn,
+        });
+
         /// /////////////////////////////////////////////////
         /// /////////////////////////////////////////////////
         /// /////////////////////////////////////////////////
@@ -230,6 +235,7 @@ export class SampleCloudtrailWithGlueStack extends cdk.Stack {
                     outputLocation: `s3://${athenaResultsBucket.bucketName}/ReadOnlyWorkGroup`,
                 },
             },
+            recursiveDeleteOption: true,
         })
 
         /// /////////////////////////////////////////////////

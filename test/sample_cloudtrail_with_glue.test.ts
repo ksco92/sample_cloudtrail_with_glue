@@ -192,13 +192,54 @@ describe('SampleCloudtrailWithGlueStack', () => {
             });
         });
 
-        test('registers S3 location with Lake Formation', () => {
+        test('registers DL location with Lake Formation', () => {
             template.hasResourceProperties('AWS::LakeFormation::Resource', {
-                ResourceArn: Match.anyValue(),
+                ResourceArn: {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Fn::GetAtt": [
+                                    Match.stringLikeRegexp('.*DataLake.*'),
+                                    "Arn",
+                                ],
+                            },
+                            "/",
+                        ],
+                    ],
+                },
                 UseServiceLinkedRole: true,
                 HybridAccessEnabled: true,
                 RoleArn: Match.anyValue(),
             });
+        });
+
+        test('registers CT location with Lake Formation', () => {
+            template.hasResourceProperties('AWS::LakeFormation::Resource', {
+                ResourceArn: {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Fn::GetAtt": [
+                                    Match.stringLikeRegexp('.*Cloudtrail.*'),
+                                    "Arn",
+                                ],
+                            },
+                            "/",
+                        ],
+                    ],
+                },
+                UseServiceLinkedRole: true,
+                HybridAccessEnabled: true,
+                RoleArn: Match.anyValue(),
+            });
+        });
+
+        test('Count of registered locations', () => {
+            // 1. CT bucket
+            // 2. DL bucket
+            template.resourceCountIs('AWS::LakeFormation::Resource', 2);
         });
     });
 
@@ -212,6 +253,7 @@ describe('SampleCloudtrailWithGlueStack', () => {
                         OutputLocation: Match.anyValue(),
                     },
                 },
+                RecursiveDeleteOption: true,
             });
         });
     });

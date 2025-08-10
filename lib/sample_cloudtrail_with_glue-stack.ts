@@ -1,16 +1,16 @@
 import * as cdk from 'aws-cdk-lib';
 import {
+    DefaultStackSynthesizer, Fn, RemovalPolicy,
+} from 'aws-cdk-lib';
+import {
     Construct,
 } from 'constructs';
 import {
-    ArnPrincipal,
+    ArnPrincipal, ServicePrincipal,
 } from "aws-cdk-lib/aws-iam";
 import {
     Key,
 } from "aws-cdk-lib/aws-kms";
-import {
-    DefaultStackSynthesizer, Fn, RemovalPolicy,
-} from "aws-cdk-lib";
 import {
     BlockPublicAccess, Bucket, BucketEncryption, ObjectOwnership,
 } from "aws-cdk-lib/aws-s3";
@@ -26,6 +26,12 @@ import {
 import {
     CfnWorkGroup,
 } from "aws-cdk-lib/aws-athena";
+import {
+    InsightType, Trail,
+} from "aws-cdk-lib/aws-cloudtrail";
+import {
+    RetentionDays,
+} from "aws-cdk-lib/aws-logs";
 
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
@@ -50,6 +56,18 @@ export class SampleCloudtrailWithGlueStack extends cdk.Stack {
             enableKeyRotation: true,
             removalPolicy: RemovalPolicy.DESTROY,
         });
+
+        const cloudtrailBucketKmsKey = new Key(this, 'CloudtrailBucketKmsKey', {
+            enableKeyRotation: true,
+            removalPolicy: RemovalPolicy.DESTROY,
+        });
+
+        const cloudtrailKmsKey = new Key(this, 'CloudtrailKmsKey', {
+            enableKeyRotation: true,
+            removalPolicy: RemovalPolicy.DESTROY,
+        });
+
+        cloudtrailKmsKey.grantEncrypt(new ServicePrincipal('cloudtrail.amazonaws.com'))
 
         const catalogKmsKey = new Key(this, 'CatalogKmsKey', {
             enableKeyRotation: true,
@@ -105,8 +123,47 @@ export class SampleCloudtrailWithGlueStack extends cdk.Stack {
             serverAccessLogsPrefix: `athena-results-bucket-${this.account}/`,
         });
 
+        const cloudtrailBucket = new Bucket(this, 'CloudtrailBucket', {
+            bucketName: `cloudtrail-bucket-${this.account}`,
+            encryptionKey: cloudtrailBucketKmsKey,
+            removalPolicy: RemovalPolicy.DESTROY,
+            autoDeleteObjects: true,
+            blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+            enforceSSL: true,
+            objectOwnership: ObjectOwnership.BUCKET_OWNER_ENFORCED,
+            bucketKeyEnabled: true,
+            serverAccessLogsBucket: loggingBucket,
+            serverAccessLogsPrefix: `athena-results-bucket-${this.account}/`,
+        });
+
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        // Bucket permissions
+
         athenaResultsBucket.grantReadWrite(new ArnPrincipal(lfServiceRoleArn));
         dataLakeBucket.grantReadWrite(new ArnPrincipal(lfServiceRoleArn));
+
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        // Cloudtrail
+
+        const trail = new Trail(this, 'FullTrail', {
+            trailName: `FullTrail`,
+            bucket: cloudtrailBucket,
+            encryptionKey: cloudtrailKmsKey,
+            insightTypes: [
+                InsightType.API_CALL_RATE,
+                InsightType.API_ERROR_RATE,
+            ],
+            sendToCloudWatchLogs: true,
+            cloudWatchLogsRetention: RetentionDays.TEN_YEARS,
+        });
+
+        trail.applyRemovalPolicy(RemovalPolicy.DESTROY);
+        trail.logAllS3DataEvents();
+        trail.logAllLambdaDataEvents();
 
         /// /////////////////////////////////////////////////
         /// /////////////////////////////////////////////////

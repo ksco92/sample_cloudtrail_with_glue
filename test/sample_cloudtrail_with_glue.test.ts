@@ -25,8 +25,10 @@ describe('SampleCloudtrailWithGlueStack', () => {
         // 1. Data lake bucket
         // 2. Athena bucket
         // 3. Catalog key
+        // 4. CT bucket
+        // 5. CT
         test('creates three KMS keys with rotation enabled', () => {
-            template.resourceCountIs('AWS::KMS::Key', 3);
+            template.resourceCountIs('AWS::KMS::Key', 5);
 
             template.allResourcesProperties('AWS::KMS::Key', {
                 EnableKeyRotation: true,
@@ -38,9 +40,10 @@ describe('SampleCloudtrailWithGlueStack', () => {
 
         // 1. Data lake bucket
         // 2. Athena bucket
-        // 3. Catalog key
+        // 3. Logging
+        // 4. CT bucket
         test('Bucket count', () => {
-            template.resourceCountIs('AWS::S3::Bucket', 3);
+            template.resourceCountIs('AWS::S3::Bucket', 4);
         })
 
         test('creates logging bucket', () => {
@@ -209,6 +212,34 @@ describe('SampleCloudtrailWithGlueStack', () => {
                         OutputLocation: Match.anyValue(),
                     },
                 },
+            });
+        });
+    });
+
+    describe('Cloudtrail', () => {
+        test('creates the trail', () => {
+            template.hasResourceProperties('AWS::CloudTrail::Trail', {
+                KMSKeyId: Match.anyValue(),
+                S3BucketName: Match.anyValue(),
+                TrailName: 'FullTrail',
+                // One for S3 data events and one for
+                // Lambda data events
+                EventSelectors: [
+                    {
+                        DataResources: Match.anyValue(),
+                    },
+                    {
+                        DataResources: Match.anyValue(),
+                    },
+                ],
+                "InsightSelectors": [
+                    {
+                        "InsightType": "ApiCallRateInsight",
+                    },
+                    {
+                        "InsightType": "ApiErrorRateInsight",
+                    },
+                ],
             });
         });
     });

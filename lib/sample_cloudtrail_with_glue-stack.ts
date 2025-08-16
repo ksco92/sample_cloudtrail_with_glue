@@ -18,10 +18,10 @@ import {
     CfnDataCatalogEncryptionSettings,
 } from "aws-cdk-lib/aws-glue";
 import {
-    CfnDataLakeSettings, CfnResource,
+    CfnDataLakeSettings, CfnPermissions, CfnResource,
 } from "aws-cdk-lib/aws-lakeformation";
 import {
-    Database,
+    Database, DataFormat, S3Table, Schema,
 } from "@aws-cdk/aws-glue-alpha";
 import {
     CfnWorkGroup,
@@ -138,8 +138,15 @@ export class SampleCloudtrailWithGlueStack extends cdk.Stack {
         /// /////////////////////////////////////////////////
         // Bucket permissions
 
-        athenaResultsBucket.grantReadWrite(new ArnPrincipal(lfServiceRoleArn));
-        dataLakeBucket.grantReadWrite(new ArnPrincipal(lfServiceRoleArn));
+        const buckets = [
+            athenaResultsBucket,
+            dataLakeBucket,
+            cloudtrailBucket,
+        ]
+
+        buckets.forEach(bucket => {
+            bucket.grantReadWrite(new ArnPrincipal(lfServiceRoleArn))
+        });
 
         /// /////////////////////////////////////////////////
         /// /////////////////////////////////////////////////
@@ -162,6 +169,7 @@ export class SampleCloudtrailWithGlueStack extends cdk.Stack {
         trail.applyRemovalPolicy(RemovalPolicy.DESTROY);
         trail.logAllS3DataEvents();
         trail.logAllLambdaDataEvents();
+        cloudtrailKmsKey.grantDecrypt(new ArnPrincipal(lfServiceRoleArn));
 
         /// /////////////////////////////////////////////////
         /// /////////////////////////////////////////////////
@@ -246,10 +254,314 @@ export class SampleCloudtrailWithGlueStack extends cdk.Stack {
 
         const databaseName = 'sample_database'
 
-        new Database(this, 'SampleDatabase', {
+        const glueDatabase = new Database(this, 'SampleDatabase', {
             databaseName: databaseName,
             description: 'This is the description.',
             locationUri: `s3://${dataLakeBucket.bucketName}/${databaseName}/`,
+        });
+
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        // Table
+
+        const tableName = 'cloudtrail_logs';
+
+        const glueTable = new S3Table(this, 'CloudtrailTable', {
+            tableName: tableName,
+            description: 'Cloudtrail logs.',
+            partitionKeys: [
+                {
+                    name: "region",
+                    type: Schema.STRING,
+                    comment: "AWS Region where the API call was made", 
+                },
+                {
+                    name: "year",
+                    type: Schema.STRING,
+                    comment: "Year of the CloudTrail event", 
+                },
+                {
+                    name: "month",
+                    type: Schema.STRING,
+                    comment: "Month of the CloudTrail event", 
+                },
+                {
+                    name: "day",
+                    type: Schema.STRING,
+                    comment: "Day of the CloudTrail event", 
+                },
+            ],
+            columns: [
+                {
+                    name: "eventversion",
+                    type: Schema.STRING,
+                    comment: "Version of the CloudTrail event format, currently 1.11", 
+                },
+                {
+                    name: "useridentity",
+                    type: Schema.struct([
+                        {
+                            name: "type",
+                            type: Schema.STRING, 
+                        },
+                        {
+                            name: "principalid",
+                            type: Schema.STRING, 
+                        },
+                        {
+                            name: "arn",
+                            type: Schema.STRING, 
+                        },
+                        {
+                            name: "accountid",
+                            type: Schema.STRING,
+                        },
+                        {
+                            name: "invokedby",
+                            type: Schema.STRING, 
+                        },
+                        {
+                            name: "accesskeyid",
+                            type: Schema.STRING, 
+                        },
+                        {
+                            name: "userName",
+                            type: Schema.STRING, 
+                        },
+                        {
+                            name: "sessioncontext",
+                            type: Schema.struct([
+                                {
+                                    name: "attributes",
+                                    type: Schema.struct([
+                                        {
+                                            name: "mfaauthenticated",
+                                            type: Schema.STRING, 
+                                        },
+                                        {
+                                            name: "creationdate",
+                                            type: Schema.STRING, 
+                                        },
+                                    ]),
+                                },
+                                {
+                                    name: "sessionissuer",
+                                    type: Schema.struct([
+                                        {
+                                            name: "type",
+                                            type: Schema.STRING, 
+                                        },
+                                        {
+                                            name: "principalId",
+                                            type: Schema.STRING, 
+                                        },
+                                        {
+                                            name: "arn",
+                                            type: Schema.STRING, 
+                                        },
+                                        {
+                                            name: "accountId",
+                                            type: Schema.STRING, 
+                                        },
+                                        {
+                                            name: "userName",
+                                            type: Schema.STRING, 
+                                        },
+                                    ]),
+                                },
+                            ]),
+                        },
+                    ]),
+                    comment: "Contains information about the IAM identity that made the request",
+                },
+                {
+                    name: "eventtime",
+                    type: Schema.STRING,
+                    comment: "Timestamp when the request was completed in UTC", 
+                },
+                {
+                    name: "eventsource",
+                    type: Schema.STRING,
+                    comment: "AWS service that received the request (e.g., ec2.amazonaws.com)", 
+                },
+                {
+                    name: "eventname",
+                    type: Schema.STRING,
+                    comment: "Specific action requested in the service's API", 
+                },
+                {
+                    name: "awsregion",
+                    type: Schema.STRING,
+                    comment: "AWS Region where the request was made (e.g., us-east-2)", 
+                },
+                {
+                    name: "sourceipaddress",
+                    type: Schema.STRING,
+                    comment: "IP address origin of the request, often 'AWS Internal' for AWS-originated events", 
+                },
+                {
+                    name: "useragent",
+                    type: Schema.STRING,
+                    comment: "Tool/method used to make the request (e.g., AWS CLI, SDK, Management Console)", 
+                },
+                {
+                    name: "errorcode",
+                    type: Schema.STRING,
+                    comment: "AWS service error code if the request failed", 
+                },
+                {
+                    name: "errormessage",
+                    type: Schema.STRING,
+                    comment: "Detailed description of the error that occurred during the request", 
+                },
+                {
+                    name: "requestparameters",
+                    type: Schema.STRING,
+                    comment: "Parameters sent with the request, up to 100 KB", 
+                },
+                {
+                    name: "responseelements",
+                    type: Schema.STRING,
+                    comment: "Response data for actions that create, update, or delete resources", 
+                },
+                {
+                    name: "additionaleventdata",
+                    type: Schema.STRING,
+                    comment: "Extra event information not in request or response, up to 28 KB", 
+                },
+                {
+                    name: "requestid",
+                    type: Schema.STRING,
+                    comment: "Unique identifier for the request generated by the service", 
+                },
+                {
+                    name: "eventid",
+                    type: Schema.STRING,
+                    comment: "CloudTrail-generated GUID to uniquely identify each event", 
+                },
+                {
+                    name: "resources",
+                    type: Schema.array(
+                        Schema.struct([
+                            {
+                                name: "ARN",
+                                type: Schema.STRING, 
+                            },
+                            {
+                                name: "accountId",
+                                type: Schema.STRING, 
+                            },
+                            {
+                                name: "type",
+                                type: Schema.STRING, 
+                            },
+                        ]),
+                    ),
+                    comment: "List of resources accessed during the event, including ARNs and account IDs",
+                },
+                {
+                    name: "eventtype",
+                    type: Schema.STRING,
+                    comment: "Categorizes the event type (e.g., AwsApiCall, AwsConsoleSignIn)", 
+                },
+                {
+                    name: "apiversion",
+                    type: Schema.STRING,
+                    comment: "API version associated with AwsApiCall events", 
+                },
+                {
+                    name: "readonly",
+                    type: Schema.STRING,
+                    comment: "Indicates whether the operation is read-only or write-only", 
+                },
+                {
+                    name: "recipientaccountid",
+                    type: Schema.STRING,
+                    comment: "Account ID that received the event, potentially different from the user's account", 
+                },
+                {
+                    name: "serviceeventdetails",
+                    type: Schema.STRING,
+                    comment: "Details about service-generated events", 
+                },
+                {
+                    name: "sharedeventid",
+                    type: Schema.STRING,
+                    comment: "GUID for events delivered to multiple accounts", 
+                },
+                {
+                    name: "vpcendpointid",
+                    type: Schema.STRING,
+                    comment: "VPC endpoint ID if the request was made via a VPC endpoint", 
+                },
+            ],
+            dataFormat: DataFormat.CLOUDTRAIL_LOGS,
+            database: glueDatabase,
+            bucket: cloudtrailBucket,
+            s3Prefix: `AWSLogs/${this.account}/CloudTrail/`,
+            parameters: {
+                classification: 'cloudtrail',
+                'projection.enabled': 'true',
+                'projection.day.type': 'integer',
+                'projection.day.range': '01,31',
+                'projection.day.digits': '2',
+                'projection.month.type': 'integer',
+                'projection.month.range': '01,12',
+                'projection.month.digits': '2',
+                'projection.region.type': 'enum',
+                // output of:
+                // aws ec2 describe-regions --query 'Regions[].RegionName' --output text | tr '\t' ','
+                'projection.region.values': 'ap-south-1,eu-north-1,eu-west-3,eu-west-2,eu-west-1,ap-northeast-3,ap-northeast-2,ap-northeast-1,ca-central-1,sa-east-1,ap-southeast-1,ap-southeast-2,eu-central-1,us-east-1,us-east-2,us-west-1,us-west-2',
+                'projection.year.type': 'integer',
+                'projection.year.range': '2025,2030',
+                'storage.location.template': `s3://${cloudtrailBucket.bucketName}/AWSLogs/${this.account}/CloudTrail/\${region}/\${year}/\${month}/\${day}`,
+            },
+        });
+
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        /// /////////////////////////////////////////////////
+        // Permissions
+
+        new CfnPermissions(this, 'DatabasePermission', {
+            permissions: [
+                'DESCRIBE',
+            ],
+            permissionsWithGrantOption: [
+
+            ],
+            resource: {
+                databaseResource: {
+                    catalogId: this.account,
+                    name: glueDatabase.databaseName,
+                },
+            },
+            dataLakePrincipal: {
+                dataLakePrincipalIdentifier: myUser.arn,
+            },
+        });
+
+        new CfnPermissions(this, 'TablePermission', {
+            permissions: [
+                'DESCRIBE',
+                'SELECT',
+            ],
+            permissionsWithGrantOption: [
+
+            ],
+            resource: {
+                tableResource: {
+                    catalogId: this.account,
+                    name: glueTable.tableName,
+                    databaseName: glueDatabase.databaseName,
+                },
+            },
+            dataLakePrincipal: {
+                dataLakePrincipalIdentifier: myUser.arn,
+            },
         });
     }
 }

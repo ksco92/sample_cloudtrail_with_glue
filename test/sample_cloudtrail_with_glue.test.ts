@@ -175,6 +175,15 @@ describe('SampleCloudtrailWithGlueStack', () => {
                 },
             });
         });
+
+        test('creates the Glue table', () => {
+            template.hasResourceProperties('AWS::Glue::Table', {
+                TableInput: {
+                    Name: 'cloudtrail_logs',
+                    Description: 'Cloudtrail logs.',
+                },
+            });
+        });
     });
 
     describe('Lake Formation', () => {
